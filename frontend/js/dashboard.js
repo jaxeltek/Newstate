@@ -40,8 +40,12 @@ async function loadReferralStats() {
   
   if (data.success) {
     //show referral link
-    const referralLink = '${window.location.origin}/index.html?ref=${data.referralCode}';
+    const referralLink = `${window.location.origin}/index.html?ref=${data.referralCode}`;
 
+    console.log('Referral link generated:', referralLink);  // Debug: check what's being generated
+    console.log('Origin:', window.location.origin);
+    console.log('Referral code:', data.referralCode);
+    
     document.getElementById('referralLink').value = referralLink;
     //update stats
     document.getElementById('totalReferrals').textContent = data.totalCompleted;

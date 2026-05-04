@@ -1,22 +1,24 @@
+// backend/config/db.js
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// Create connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false  // Required for Railway
+  },
+  connectionTimeoutMillis: 30000,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
 });
 
-// Log when connected
-pool.on('connect', () => {
-  console.log('✅ PostgreSQL database connected');
-});
-
-// Log errors
-pool.on('error', (err) => {
-  console.error('❌ Unexpected database error:', err.message);
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('❌ Railway connection error:', err.message);
+  } else {
+    console.log('✅ Connected to Railway PostgreSQL successfully');
+    release();
+  }
 });
 
 module.exports = pool;
