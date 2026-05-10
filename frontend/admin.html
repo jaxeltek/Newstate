@@ -5,50 +5,743 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Panel - Refer & Earn</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .hidden { display: none; }
+    .loading-spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #10b981;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .nav-item.active {
+      background-color: rgba(255,255,255,0.2);
+    }
+  </style>
 </head>
 <body class="bg-gray-100">
   <div class="flex min-h-screen">
-    <!-- Admin Sidebar -->
-    <div class="w-64 bg-gray-900 text-white fixed h-full">
+    <!-- Sidebar -->
+    <div class="w-64 bg-gray-900 text-white fixed h-full shadow-xl z-40">
       <div class="p-6 border-b border-gray-800">
         <h2 class="text-xl font-bold">Admin Panel</h2>
-        <p class="text-gray-400 text-sm">Referral System</p>
+        <p class="text-gray-400 text-sm">Referral System Dashboard</p>
       </div>
       <nav class="p-4">
-        <a href="#" onclick="showAdminSection('dashboard')" class="nav-item flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-all mb-1">
-          <i class="fas fa-chart-line"></i><span>Dashboard</span>
+        <a href="#" onclick="loadSection('dashboard')" class="nav-item flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-all mb-1">
+          <i class="fas fa-chart-line w-5"></i><span>Dashboard</span>
         </a>
-        <a href="#" onclick="showAdminSection('users')" class="nav-item flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-all mb-1">
-          <i class="fas fa-users"></i><span>Users</span>
+        <a href="#" onclick="loadSection('users')" class="nav-item flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-all mb-1">
+          <i class="fas fa-users w-5"></i><span>Users</span>
         </a>
-        <a href="#" onclick="showAdminSection('withdrawals')" class="nav-item flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-all mb-1">
-          <i class="fas fa-money-bill-wave"></i><span>Withdrawals</span>
+        <a href="#" onclick="loadSection('transactions')" class="nav-item flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-all mb-1">
+          <i class="fas fa-exchange-alt w-5"></i><span>Transactions</span>
         </a>
-        <a href="#" onclick="showAdminSection('transactions')" class="nav-item flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-all mb-1">
-          <i class="fas fa-exchange-alt"></i><span>Transactions</span>
+        <a href="#" onclick="loadSection('referrals')" class="nav-item flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-all mb-1">
+          <i class="fas fa-link w-5"></i><span>Referrals</span>
         </a>
-        <a href="#" onclick="showAdminSection('referrals')" class="nav-item flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-all mb-1">
-          <i class="fas fa-link"></i><span>Referrals</span>
+        <a href="#" onclick="loadSection('withdrawals')" class="nav-item flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-all mb-1">
+          <i class="fas fa-money-bill-wave w-5"></i><span>Withdrawals</span>
         </a>
         <hr class="my-4 border-gray-800">
         <a href="#" onclick="logout()" class="flex items-center gap-3 p-3 rounded-lg hover:bg-red-600 transition-all">
-          <i class="fas fa-sign-out-alt"></i><span>Logout</span>
+          <i class="fas fa-sign-out-alt w-5"></i><span>Logout</span>
         </a>
       </nav>
     </div>
 
     <!-- Main Content -->
     <div class="flex-1 ml-64">
-      <div class="bg-white shadow-sm p-6">
-        <h1 class="text-2xl font-bold text-gray-800" id="adminSectionTitle">Dashboard</h1>
+      <div class="bg-white shadow-sm p-6 sticky top-0 z-10">
+        <h1 class="text-2xl font-bold text-gray-800" id="pageTitle">Dashboard</h1>
       </div>
-      <div class="p-6" id="adminContent"></div>
+      <div class="p-6" id="adminContent">
+        <div class="text-center py-8">
+          <div class="loading-spinner"></div>
+          <p class="mt-2 text-gray-500">Loading dashboard...</p>
+        </div>
+      </div>
     </div>
   </div>
 
-  <script src="js/utils.js"></script>
-  <script src="js/admin.js"></script>
+  <script>
+    // API Configuration
+    const API_BASE = 'http://localhost:5000/api';
+    let currentSection = 'dashboard';
+    let currentWithdrawalFilter = 'pending';
+    let withdrawalsData = [];
+
+    // Helper Functions
+    function getToken() {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        window.location.href = 'index.html';
+        return null;
+      }
+      return token;
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `fixed top-20 right-4 px-6 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2 ${
+        type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+      } text-white`;
+      toast.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i>${message}`;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 5000);
+    }
+
+    function formatMoney(amount) {
+      return `Ksh ${parseFloat(amount || 0).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return 'N/A';
+      try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-KE') + ' ' + date.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
+      } catch {
+        return 'Invalid date';
+      }
+    }
+
+    function updateActiveNav(section) {
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active', 'bg-gray-800');
+      });
+    }
+
+    // ============================================
+    // DASHBOARD SECTION
+    // ============================================
+    async function loadDashboard(container) {
+      try {
+        const response = await fetch(`${API_BASE}/admin/stats`, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          container.innerHTML = `
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <div class="bg-white rounded-xl shadow-sm p-6 card-hover">
+                <p class="text-gray-500 text-sm">Total Users</p>
+                <p class="text-3xl font-bold text-blue-600">${data.stats.users.total}</p>
+                <div class="text-sm mt-2">
+                  <span class="text-green-600">Active: ${data.stats.users.active}</span>
+                  <span class="text-yellow-600 ml-2">Pending: ${data.stats.users.pending}</span>
+                </div>
+              </div>
+              
+              <div class="bg-white rounded-xl shadow-sm p-6">
+                <p class="text-gray-500 text-sm">Total Referrals</p>
+                <p class="text-3xl font-bold text-purple-600">${data.stats.referrals.total}</p>
+                <div class="text-sm mt-2">
+                  <span class="text-yellow-600">Pending: ${data.stats.referrals.pending}</span>
+                </div>
+              </div>
+              
+              <div class="bg-white rounded-xl shadow-sm p-6">
+                <p class="text-gray-500 text-sm">Total Earnings</p>
+                <p class="text-3xl font-bold text-green-600">${formatMoney(data.stats.earnings.collected)}</p>
+                <p class="text-sm text-gray-500">Paid out: ${formatMoney(data.stats.earnings.total)}</p>
+              </div>
+              
+              <div class="bg-white rounded-xl shadow-sm p-6">
+                <p class="text-gray-500 text-sm">Platform Balance</p>
+                <p class="text-3xl font-bold text-orange-600">${formatMoney(data.stats.platform.balance)}</p>
+                <p class="text-sm text-gray-500">In user wallets: ${formatMoney(data.stats.platform.user_wallets)}</p>
+              </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="bg-white rounded-xl shadow-sm p-6">
+                <h3 class="font-bold text-gray-800 mb-4">Withdrawals Overview</h3>
+                <div class="space-y-2">
+                  <div class="flex justify-between">
+                    <span>Pending:</span>
+                    <span class="font-semibold text-yellow-600">${data.stats.withdrawals.pending.count} (${formatMoney(data.stats.withdrawals.pending.total)})</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span>Approved:</span>
+                    <span class="font-semibold text-blue-600">${data.stats.withdrawals.approved.count} (${formatMoney(data.stats.withdrawals.approved.total)})</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="bg-white rounded-xl shadow-sm p-6">
+                <h3 class="font-bold text-gray-800 mb-4">Quick Actions</h3>
+                <div class="space-y-2">
+                  <button onclick="loadSection('withdrawals')" class="w-full bg-yellow-500 text-white py-2 rounded-lg hover:bg-yellow-600">
+                    Review Pending Withdrawals
+                  </button>
+                  <button onclick="loadSection('users')" class="w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600">
+                    Manage Users
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+      } catch (error) {
+        console.error('Dashboard error:', error);
+        container.innerHTML = '<div class="text-red-600 text-center py-8">Error loading dashboard</div>';
+      }
+    }
+
+    // ============================================
+    // USERS SECTION
+    // ============================================
+    async function loadUsers(container) {
+      try {
+        const response = await fetch(`${API_BASE}/admin/users`, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          container.innerHTML = `
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-4 py-3 text-left">ID</th>
+                      <th class="px-4 py-3 text-left">Username</th>
+                      <th class="px-4 py-3 text-left">Email</th>
+                      <th class="px-4 py-3 text-left">Phone</th>
+                      <th class="px-4 py-3 text-left">Status</th>
+                      <th class="px-4 py-3 text-left">Wallet</th>
+                      <th class="px-4 py-3 text-left">Earnings</th>
+                      <th class="px-4 py-3 text-left">Referrals</th>
+                      <th class="px-4 py-3 text-left">Joined</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${data.users.map(user => `
+                      <tr class="border-b hover:bg-gray-50">
+                        <td class="px-4 py-3">${user.id}</td>
+                        <td class="px-4 py-3 font-medium">${user.username}</td>
+                        <td class="px-4 py-3">${user.email}</td>
+                        <td class="px-4 py-3">${user.phone}</td>
+                        <td class="px-4 py-3">
+                          <span class="px-2 py-1 rounded-full text-xs ${user.registration_paid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">
+                            ${user.registration_paid ? 'Active' : 'Pending Payment'}
+                          </span>
+                        </td>
+                        <td class="px-4 py-3">${formatMoney(user.wallet_balance)}</td>
+                        <td class="px-4 py-3">${formatMoney(user.total_earnings)}</td>
+                        <td class="px-4 py-3">${user.referral_count || 0}</td>
+                        <td class="px-4 py-3 text-sm">${formatDate(user.created_at)}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+        }
+      } catch (error) {
+        console.error('Users error:', error);
+        container.innerHTML = '<div class="text-red-600 text-center py-8">Error loading users</div>';
+      }
+    }
+
+    // ============================================
+    // TRANSACTIONS SECTION
+    // ============================================
+    async function loadTransactions(container) {
+      try {
+        const response = await fetch(`${API_BASE}/admin/transactions`, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          container.innerHTML = `
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-4 py-3 text-left">ID</th>
+                      <th class="px-4 py-3 text-left">User</th>
+                      <th class="px-4 py-3 text-left">Type</th>
+                      <th class="px-4 py-3 text-left">Amount</th>
+                      <th class="px-4 py-3 text-left">Status</th>
+                      <th class="px-4 py-3 text-left">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${data.transactions.map(tx => `
+                      <tr class="border-b hover:bg-gray-50">
+                        <td class="px-4 py-3">${tx.id}</td>
+                        <td class="px-4 py-3">${tx.username}</td>
+                        <td class="px-4 py-3 capitalize">${tx.type}</td>
+                        <td class="px-4 py-3 font-semibold">${formatMoney(tx.amount)}</td>
+                        <td class="px-4 py-3">
+                          <span class="px-2 py-1 rounded-full text-xs ${
+                            tx.status === 'completed' ? 'bg-green-100 text-green-700' :
+                            tx.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                          }">
+                            ${tx.status}
+                          </span>
+                        </td>
+                        <td class="px-4 py-3 text-sm">${formatDate(tx.created_at)}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+        }
+      } catch (error) {
+        container.innerHTML = '<div class="text-red-600 text-center py-8">Error loading transactions</div>';
+      }
+    }
+
+    // ============================================
+    // REFERRALS SECTION
+    // ============================================
+    async function loadReferrals(container) {
+      try {
+        const response = await fetch(`${API_BASE}/admin/referrals`, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          container.innerHTML = `
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-4 py-3 text-left">ID</th>
+                      <th class="px-4 py-3 text-left">Referrer</th>
+                      <th class="px-4 py-3 text-left">Referred</th>
+                      <th class="px-4 py-3 text-left">Status</th>
+                      <th class="px-4 py-3 text-left">Commission</th>
+                      <th class="px-4 py-3 text-left">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${data.referrals.map(ref => `
+                      <tr class="border-b hover:bg-gray-50">
+                        <td class="px-4 py-3">${ref.id}</td>
+                        <td class="px-4 py-3">${ref.referrer_name}</td>
+                        <td class="px-4 py-3">${ref.referred_name || 'Pending'}</td>
+                        <td class="px-4 py-3">
+                          <span class="px-2 py-1 rounded-full text-xs ${ref.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">
+                            ${ref.status}
+                          </span>
+                        </td>
+                        <td class="px-4 py-3">${ref.commission ? formatMoney(ref.commission) : '-'}</td>
+                        <td class="px-4 py-3 text-sm">${formatDate(ref.created_at)}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+        }
+      } catch (error) {
+        container.innerHTML = '<div class="text-red-600 text-center py-8">Error loading referrals</div>';
+      }
+    }
+
+    // ============================================
+    // WITHDRAWALS SECTION
+    // ============================================
+    async function loadWithdrawalStats() {
+      try {
+        const response = await fetch(`${API_BASE}/admin/withdrawals/stats`, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          document.getElementById('pendingWithdrawalsCount').textContent = data.stats.pending_count || 0;
+          document.getElementById('pendingWithdrawalsTotal').textContent = formatMoney(data.stats.pending_total || 0);
+          document.getElementById('approvedWithdrawalsCount').textContent = data.stats.approved_count || 0;
+          document.getElementById('approvedWithdrawalsTotal').textContent = formatMoney(data.stats.approved_total || 0);
+          document.getElementById('processedWithdrawalsCount').textContent = data.stats.processed_count || 0;
+          document.getElementById('processedWithdrawalsTotal').textContent = formatMoney(data.stats.processed_total || 0);
+          document.getElementById('rejectedWithdrawalsCount').textContent = data.stats.rejected_count || 0;
+        }
+      } catch (error) {
+        console.error('Error loading withdrawal stats:', error);
+      }
+    }
+
+    async function loadWithdrawals(container, status = 'pending') {
+      currentWithdrawalFilter = status;
+      
+      try {
+        let url = `${API_BASE}/admin/withdrawals/all`;
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          withdrawalsData = data.withdrawals;
+          let filteredWithdrawals = withdrawalsData;
+          
+          if (status === 'pending') {
+            filteredWithdrawals = withdrawalsData.filter(w => w.status === 'pending');
+          } else if (status === 'approved') {
+            filteredWithdrawals = withdrawalsData.filter(w => w.status === 'approved' && !w.admin_processed);
+          } else if (status === 'processed') {
+            filteredWithdrawals = withdrawalsData.filter(w => w.status === 'approved' && w.admin_processed === true);
+          } else if (status === 'rejected') {
+            filteredWithdrawals = withdrawalsData.filter(w => w.status === 'rejected');
+          }
+          
+          const statsHtml = `
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              <div class="bg-white rounded-xl shadow-sm p-6">
+                <p class="text-gray-500 text-sm">Pending Withdrawals</p>
+                <p class="text-3xl font-bold text-yellow-600" id="pendingWithdrawalsCount">0</p>
+                <p class="text-sm text-gray-500" id="pendingWithdrawalsTotal">Ksh 0</p>
+              </div>
+              <div class="bg-white rounded-xl shadow-sm p-6">
+                <p class="text-gray-500 text-sm">Approved (Pending Process)</p>
+                <p class="text-3xl font-bold text-blue-600" id="approvedWithdrawalsCount">0</p>
+                <p class="text-sm text-gray-500" id="approvedWithdrawalsTotal">Ksh 0</p>
+              </div>
+              <div class="bg-white rounded-xl shadow-sm p-6">
+                <p class="text-gray-500 text-sm">Processed</p>
+                <p class="text-3xl font-bold text-green-600" id="processedWithdrawalsCount">0</p>
+                <p class="text-sm text-gray-500" id="processedWithdrawalsTotal">Ksh 0</p>
+              </div>
+              <div class="bg-white rounded-xl shadow-sm p-6">
+                <p class="text-gray-500 text-sm">Rejected</p>
+                <p class="text-3xl font-bold text-red-600" id="rejectedWithdrawalsCount">0</p>
+              </div>
+            </div>
+          `;
+          
+          const filterButtons = `
+            <div class="flex flex-wrap gap-3 mb-6">
+              <button onclick="loadWithdrawals(document.getElementById('adminContent'), 'pending')" class="px-4 py-2 rounded-lg ${status === 'pending' ? 'bg-yellow-500 text-white' : 'bg-gray-200 text-gray-700'} hover:opacity-80">
+                Pending
+              </button>
+              <button onclick="loadWithdrawals(document.getElementById('adminContent'), 'approved')" class="px-4 py-2 rounded-lg ${status === 'approved' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} hover:opacity-80">
+                Approved (Ready)
+              </button>
+              <button onclick="loadWithdrawals(document.getElementById('adminContent'), 'processed')" class="px-4 py-2 rounded-lg ${status === 'processed' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'} hover:opacity-80">
+                Processed
+              </button>
+              <button onclick="loadWithdrawals(document.getElementById('adminContent'), 'rejected')" class="px-4 py-2 rounded-lg ${status === 'rejected' ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700'} hover:opacity-80">
+                Rejected
+              </button>
+              <button onclick="loadWithdrawals(document.getElementById('adminContent'), 'all')" class="px-4 py-2 rounded-lg ${status === 'all' ? 'bg-gray-500 text-white' : 'bg-gray-200 text-gray-700'} hover:opacity-80">
+                All
+              </button>
+            </div>
+          `;
+          
+          let tableHtml = `
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      ${status === 'pending' ? '<th class="px-4 py-3 text-left"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()"></th>' : ''}
+                      <th class="px-4 py-3 text-left">ID</th>
+                      <th class="px-4 py-3 text-left">User</th>
+                      <th class="px-4 py-3 text-left">Phone</th>
+                      <th class="px-4 py-3 text-left">Amount</th>
+                      <th class="px-4 py-3 text-left">Status</th>
+                      <th class="px-4 py-3 text-left">Date Requested</th>
+                      <th class="px-4 py-3 text-left">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+          `;
+          
+          if (filteredWithdrawals.length === 0) {
+            tableHtml += `<tr><td colspan="8" class="text-center py-8 text-gray-500">No withdrawals found</td></tr>`;
+          } else {
+            filteredWithdrawals.forEach(wd => {
+              tableHtml += `
+                <tr class="border-b hover:bg-gray-50">
+                  ${status === 'pending' ? `<td class="px-4 py-3"><input type="checkbox" class="withdraw-checkbox" value="${wd.id}"></td>` : ''}
+                  <td class="px-4 py-3">${wd.id}</td>
+                  <td class="px-4 py-3 font-medium">${wd.username}</td>
+                  <td class="px-4 py-3">${wd.phone || 'N/A'}</td>
+                  <td class="px-4 py-3 font-semibold text-green-600">${formatMoney(wd.amount)}</td>
+                  <td class="px-4 py-3">
+                    <span class="px-2 py-1 rounded-full text-xs ${
+                      wd.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                      wd.status === 'approved' && !wd.admin_processed ? 'bg-blue-100 text-blue-700' :
+                      wd.status === 'approved' && wd.admin_processed ? 'bg-green-100 text-green-700' :
+                      'bg-red-100 text-red-700'
+                    }">
+                      ${wd.status === 'pending' ? 'Pending' : 
+                        wd.status === 'approved' && !wd.admin_processed ? 'Approved (Ready)' :
+                        wd.status === 'approved' && wd.admin_processed ? 'Processed' : 'Rejected'}
+                    </span>
+                  </td>
+                  <td class="px-4 py-3 text-sm">${formatDate(wd.created_at)}</td>
+                  <td class="px-4 py-3">
+                    ${wd.status === 'pending' ? `
+                      <button onclick="approveWithdrawal(${wd.id})" class="bg-green-500 text-white px-3 py-1 rounded mr-1 text-sm hover:bg-green-600">Approve</button>
+                      <button onclick="rejectWithdrawal(${wd.id})" class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">Reject</button>
+                    ` : wd.status === 'approved' && !wd.admin_processed ? `
+                      <button onclick="processWithdrawal(${wd.id})" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
+                        <i class="fas fa-paper-plane mr-1"></i>Process
+                      </button>
+                    ` : ''}
+                  </td>
+                </tr>
+              `;
+            });
+          }
+          
+          tableHtml += `
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+          
+          const bulkActions = status === 'pending' && filteredWithdrawals.length > 0 ? `
+            <div class="mt-4">
+              <button onclick="bulkApproveWithdrawals()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+                <i class="fas fa-check-double mr-2"></i>Approve Selected
+              </button>
+            </div>
+          ` : '';
+          
+          container.innerHTML = statsHtml + filterButtons + tableHtml + bulkActions;
+          
+          // Load stats into the newly created elements
+          await loadWithdrawalStats();
+        }
+      } catch (error) {
+        console.error('Error loading withdrawals:', error);
+        container.innerHTML = '<div class="text-red-600 text-center py-8">Error loading withdrawals</div>';
+      }
+    }
+
+    function toggleSelectAll() {
+      const selectAll = document.getElementById('selectAllCheckbox');
+      if (selectAll) {
+        const checkboxes = document.querySelectorAll('.withdraw-checkbox');
+        checkboxes.forEach(cb => cb.checked = selectAll.checked);
+      }
+    }
+
+    async function bulkApproveWithdrawals() {
+      const checkboxes = document.querySelectorAll('.withdraw-checkbox:checked');
+      const withdrawalIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+      
+      if (withdrawalIds.length === 0) {
+        showToast('No withdrawals selected', 'error');
+        return;
+      }
+      
+      if (confirm(`Approve ${withdrawalIds.length} withdrawal(s)? This will mark them as approved and ready for processing.`)) {
+        try {
+          const response = await fetch(`${API_BASE}/admin/withdrawals/bulk-approve`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${getToken()}`
+            },
+            body: JSON.stringify({ withdrawal_ids: withdrawalIds })
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            showToast(data.message);
+            loadWithdrawals(document.getElementById('adminContent'), currentWithdrawalFilter);
+          } else {
+            showToast(data.error, 'error');
+          }
+        } catch (error) {
+          console.error('Bulk approve error:', error);
+          showToast('Failed to approve withdrawals', 'error');
+        }
+      }
+    }
+
+    async function approveWithdrawal(id) {
+      if (confirm('Approve this withdrawal? The user will be notified.')) {
+        try {
+          const response = await fetch(`${API_BASE}/admin/withdrawals/${id}/approve`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+          });
+          const data = await response.json();
+          
+          if (data.success) {
+            showToast('Withdrawal approved. Ready to process payment.');
+            loadWithdrawals(document.getElementById('adminContent'), currentWithdrawalFilter);
+          } else {
+            showToast(data.error, 'error');
+          }
+        } catch (error) {
+          showToast('Failed to approve withdrawal', 'error');
+        }
+      }
+    }
+
+    async function rejectWithdrawal(id) {
+      const reason = prompt('Enter rejection reason:');
+      if (reason === null) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/admin/withdrawals/${id}/reject`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getToken()}`
+          },
+          body: JSON.stringify({ reason })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          showToast('Withdrawal rejected and amount refunded');
+          loadWithdrawals(document.getElementById('adminContent'), currentWithdrawalFilter);
+        } else {
+          showToast(data.error, 'error');
+        }
+      } catch (error) {
+        showToast('Failed to reject withdrawal', 'error');
+      }
+    }
+
+    async function processWithdrawal(id) {
+      const transactionRef = prompt('Enter transaction reference (M-PESA confirmation code or leave empty):');
+      
+      if (confirm('Confirm that you have sent the money to the user?')) {
+        try {
+          const response = await fetch(`${API_BASE}/admin/withdrawals/${id}/process`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${getToken()}`
+            },
+            body: JSON.stringify({ 
+              transaction_reference: transactionRef || `ADMIN_${Date.now()}`,
+              notes: 'Withdrawal processed by admin'
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            showToast(data.message);
+            loadWithdrawals(document.getElementById('adminContent'), currentWithdrawalFilter);
+          } else {
+            showToast(data.error, 'error');
+          }
+        } catch (error) {
+          console.error('Process withdrawal error:', error);
+          showToast('Failed to process withdrawal', 'error');
+        }
+      }
+    }
+
+    // ============================================
+    // SECTION LOADER
+    // ============================================
+    async function loadSection(section) {
+      currentSection = section;
+      document.getElementById('pageTitle').textContent = section.charAt(0).toUpperCase() + section.slice(1);
+      const content = document.getElementById('adminContent');
+      
+      // Update active nav styling
+      updateActiveNav(section);
+      
+      content.innerHTML = '<div class="text-center py-8"><div class="loading-spinner"></div><p class="mt-2 text-gray-500">Loading...</p></div>';
+      
+      switch(section) {
+        case 'dashboard':
+          await loadDashboard(content);
+          break;
+        case 'users':
+          await loadUsers(content);
+          break;
+        case 'transactions':
+          await loadTransactions(content);
+          break;
+        case 'referrals':
+          await loadReferrals(content);
+          break;
+        case 'withdrawals':
+          await loadWithdrawals(content, 'pending');
+          break;
+      }
+    }
+
+    // ============================================
+    // AUTH & INITIALIZATION
+    // ============================================
+    async function checkAdminAccess() {
+      const token = getToken();
+      if (!token) return false;
+      
+      try {
+        const response = await fetch(`${API_BASE}/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Authentication failed');
+        
+        const data = await response.json();
+        
+        if (!data.user || data.user.role !== 'admin') {
+          showToast('Admin access required. You do not have permission to view this page.', 'error');
+          setTimeout(() => window.location.href = 'dashboard.html', 2000);
+          return false;
+        }
+        
+        return true;
+      } catch (error) {
+        console.error('Admin access check error:', error);
+        showToast('Authentication failed. Please login again.', 'error');
+        setTimeout(() => window.location.href = 'index.html', 1500);
+        return false;
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = 'index.html';
+    }
+
+    // Make functions globally available
+    window.loadSection = loadSection;
+    window.approveWithdrawal = approveWithdrawal;
+    window.rejectWithdrawal = rejectWithdrawal;
+    window.processWithdrawal = processWithdrawal;
+    window.toggleSelectAll = toggleSelectAll;
+    window.bulkApproveWithdrawals = bulkApproveWithdrawals;
+    window.logout = logout;
+    window.loadWithdrawals = loadWithdrawals;
+
+    // Initialize
+    checkAdminAccess().then(hasAccess => {
+      if (hasAccess) {
+        loadSection('dashboard');
+      }
+    });
+  </script>
 </body>
 </html>

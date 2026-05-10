@@ -6,13 +6,17 @@
   <title>Refer & Earn - Kenya's Best Referral Program</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .hidden { display: none; }
+    .transition-all { transition: all 0.3s ease; }
+  </style>
 </head>
 <body class="bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 min-h-screen">
   <div class="container mx-auto px-4 py-8">
     <!-- Hero Section -->
     <div class="text-center mb-8">
       <h1 class="text-5xl font-bold text-green-600 mb-2">Refer & Earn</h1>
-      <p class="text-gray-600 text-lg">Earn Ksh 100 for every friend you refer!</p>
+      <p class="text-gray-600 text-lg">Earn Ksh 120 for every friend you refer!</p>
     </div>
 
     <div class="max-w-md mx-auto">
@@ -92,10 +96,10 @@
             </div>
             <ul class="text-sm text-gray-600 space-y-1">
               <li>✓ Register for free</li>
-              <li>✓ Pay Ksh 200 activation fee</li>
+              <li>✓ Pay Ksh 300 activation fee</li>
               <li>✓ Get your unique referral link</li>
               <li>✓ Share with friends</li>
-              <li>✓ Earn Ksh 100 per successful referral</li>
+              <li>✓ Earn Ksh 120 per successful referral</li>
               <li>✓ Withdraw earnings from Ksh 300</li>
             </ul>
           </div>
@@ -105,16 +109,47 @@
   </div>
 
   <script>
-    // API Configuration
+    // ============================================
+    // IMMEDIATE REFERRAL CODE CAPTURE (CRITICAL)
+    // This must run BEFORE anything else
+    // ============================================
+    (function captureReferralCode() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const referralCode = urlParams.get('ref');
+      
+      console.log('🔍 Page loaded - Referral code in URL:', referralCode);
+      
+      if (referralCode && referralCode !== 'null' && referralCode !== 'undefined' && referralCode.trim() !== '') {
+        sessionStorage.setItem('referral_code', referralCode.trim());
+        console.log('✅ Referral code saved to sessionStorage:', referralCode.trim());
+        
+        // Show a nice message to referred users
+        setTimeout(() => {
+          const message = document.createElement('div');
+          message.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+          message.innerHTML = '<i class="fas fa-gift mr-2"></i>You were referred by a friend! Complete registration to join.';
+          document.body.appendChild(message);
+          setTimeout(() => message.remove(), 5000);
+        }, 1000);
+      } else {
+        console.log('ℹ️ No referral code found in URL');
+      }
+    })();
+
+    // ============================================
+    // API CONFIGURATION
+    // ============================================
     const API_BASE = 'http://localhost:5000/api';
     
-    // Helper Functions
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
     function showToast(message, type = 'success') {
       const toast = document.createElement('div');
       toast.className = `fixed top-20 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
         type === 'success' ? 'bg-green-500' : 'bg-red-500'
       } text-white`;
-      toast.textContent = message;
+      toast.innerHTML = message;
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 3000);
     }
@@ -127,13 +162,21 @@
       localStorage.setItem('token', token);
     }
     
-    // Get referral code from URL
-    function getReferralCode() {
-      const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('ref');
+    // Get referral code from sessionStorage (set by the capture script above)
+    function getStoredReferralCode() {
+      const code = sessionStorage.getItem('referral_code');
+      console.log('📤 Retrieved referral code from sessionStorage:', code);
+      return code;
     }
     
-    // Tab Switching
+    function clearStoredReferralCode() {
+      sessionStorage.removeItem('referral_code');
+      console.log('🗑️ Referral code cleared from sessionStorage');
+    }
+    
+    // ============================================
+    // TAB SWITCHING
+    // ============================================
     function switchTab(tab) {
       const loginForm = document.getElementById('loginForm');
       const registerForm = document.getElementById('registerForm');
@@ -157,7 +200,9 @@
       }
     }
     
-    // Handle Login
+    // ============================================
+    // LOGIN HANDLER
+    // ============================================
     async function handleLogin() {
       const email = document.getElementById('loginEmail').value;
       const password = document.getElementById('loginPassword').value;
@@ -202,13 +247,25 @@
       }
     }
     
-    // Handle Register
+    // ============================================
+    // REGISTER HANDLER - WITH REFERRAL CODE
+    // ============================================
     async function handleRegister() {
       const username = document.getElementById('regUsername').value;
       const email = document.getElementById('regEmail').value;
       const phone = document.getElementById('regPhone').value;
       const password = document.getElementById('regPassword').value;
-      const referral_code = getReferralCode();
+      
+      // Get referral code from sessionStorage (captured from URL)
+      const referral_code = getStoredReferralCode();
+      
+      console.log('========================================');
+      console.log('📝 REGISTRATION WITH REFERRAL');
+      console.log('Username:', username);
+      console.log('Email:', email);
+      console.log('Phone:', phone);
+      console.log('Referral code from session:', referral_code);
+      console.log('========================================');
       
       const btn = document.getElementById('registerBtn');
       
@@ -228,8 +285,13 @@
       
       try {
         const requestBody = { username, email, phone, password };
-        if (referral_code) {
-          requestBody.referral_code = referral_code;
+        
+        // Only add referral_code if it exists and is valid
+        if (referral_code && referral_code !== 'null' && referral_code !== 'undefined' && referral_code.trim() !== '') {
+          requestBody.referral_code = referral_code.trim();
+          console.log('✅ Adding referral_code to request:', requestBody.referral_code);
+        } else {
+          console.log('ℹ️ No referral code - first time user');
         }
         
         const response = await fetch(`${API_BASE}/auth/register`, {
@@ -243,7 +305,11 @@
         if (data.success) {
           setToken(data.token);
           localStorage.setItem('user', JSON.stringify(data.user));
-          showToast('Registration successful! Please activate your account.');
+          
+          // Clear referral code after successful registration
+          clearStoredReferralCode();
+          
+          showToast(data.message);
           window.location.href = 'activation.html';
         } else {
           showToast(data.error, 'error');
@@ -257,24 +323,31 @@
       }
     }
     
-    // Initialize event listeners when page loads
+    // ============================================
+    // INITIALIZE EVENT LISTENERS
+    // ============================================
     document.addEventListener('DOMContentLoaded', function() {
+      console.log('DOM loaded, initializing event listeners...');
+      
       // Tab buttons
-      document.getElementById('loginTabBtn').onclick = () => switchTab('login');
-      document.getElementById('registerTabBtn').onclick = () => switchTab('register');
+      const loginTab = document.getElementById('loginTabBtn');
+      const registerTab = document.getElementById('registerTabBtn');
+      if (loginTab) loginTab.onclick = () => switchTab('login');
+      if (registerTab) registerTab.onclick = () => switchTab('register');
       
       // Form buttons
-      document.getElementById('loginBtn').onclick = handleLogin;
-      document.getElementById('registerBtn').onclick = handleRegister;
+      const loginBtn = document.getElementById('loginBtn');
+      const registerBtn = document.getElementById('registerBtn');
+      if (loginBtn) loginBtn.onclick = handleLogin;
+      if (registerBtn) registerBtn.onclick = handleRegister;
       
       // Show registration form if referral code is present
-      const refCode = getReferralCode();
-      if (refCode) {
+      const refCode = sessionStorage.getItem('referral_code');
+      if (refCode && refCode !== 'null' && refCode !== 'undefined') {
         switchTab('register');
         showToast('You were referred by a friend! Complete registration to join.', 'success');
       }
     });
   </script>
-  <script src="js/main.js"></script>
 </body>
 </html>

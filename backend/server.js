@@ -41,11 +41,12 @@ const walletRoutes = require('./routes/wallet');
 const adminRoutes = require('./routes/admin');
 
 // Use routes
-app.use('/api/auth', authRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/referrals', referralRoutes);
-app.use('/api/wallet', walletRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/payments', require('./routes/payments'));
+app.use('/api/referrals', require('./routes/referrals'));
+app.use('/api/wallet', require('./routes/wallet'));
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api/settings', require('./routes/settings'));
 
 console.log('✅ All routes mounted');
 console.log('   - /api/auth');
@@ -53,7 +54,7 @@ console.log('   - /api/payments');
 console.log('   - /api/referrals');
 console.log('   - /api/wallet');
 console.log('   - /api/admin');
-
+console.log('   - /api/settings');
 // 404 handler
 app.use('*', (req, res) => {
   console.log(`❌ 404: ${req.method} ${req.url}`);

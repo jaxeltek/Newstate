@@ -30,7 +30,7 @@
         <div class="bg-gradient-to-r from-green-600 to-green-700 p-6 text-white text-center">
           <i class="fas fa-mobile-alt text-5xl mb-3"></i>
           <h2 class="text-2xl font-bold">Activate Your Account</h2>
-          <p class="text-green-100 mt-1">Pay Ksh 300 to start earning!</p>
+          <p class="text-green-100 mt-1" id="activationSubtitle">Loading...</p>
         </div>
 
         <div class="p-6">
@@ -40,9 +40,9 @@
           </div>
 
           <div class="text-center mb-6">
-            <div class="text-5xl font-bold text-green-600 mb-2">Ksh 300</div>
+            <div class="text-5xl font-bold text-green-600 mb-2" id="activationAmount">Loading...</div>
             <p class="text-gray-500 text-sm">One-time activation fee</p>
-            <p class="text-xs text-gray-400 mt-1">Earn Ksh 120 per referral!</p>
+            <p class="text-xs text-gray-400 mt-1" id="commissionMessage">Loading...</p>
           </div>
 
           <!-- M-PESA Phone Input -->
@@ -61,7 +61,7 @@
             <h3 class="font-bold text-blue-800 mb-2">How to Pay:</h3>
             <ol class="text-sm text-blue-700 space-y-1">
               <li>1. Enter your M-PESA phone number</li>
-              <li>2. Click "Pay Ksh 300"</li>
+              <li>2. Click the pay button below</li>
               <li>3. Enter your M-PESA PIN on your phone</li>
               <li>4. Account activates automatically</li>
             </ol>
@@ -69,7 +69,7 @@
 
           <button id="payButton" 
                   class="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold py-4 rounded-xl transition-all text-lg">
-            <i class="fas fa-money-bill-wave mr-2"></i>Pay Ksh 300 via M-PESA
+            <i class="fas fa-money-bill-wave mr-2"></i><span id="payButtonText">Loading...</span>
           </button>
 
           <div id="statusArea" class="mt-4"></div>
@@ -86,6 +86,8 @@
 
   <script>
     const API_BASE = 'http://localhost:5000/api';
+    let activationAmount = 300;
+    let referralCommission = 120;
     
     function getToken() {
       return localStorage.getItem('token');
@@ -94,11 +96,38 @@
     function showToast(message, type = 'success') {
       const toast = document.createElement('div');
       toast.className = `fixed top-20 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
-        type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+        type === 'success' ? 'bg-green-500' : 'bg-red-500'
       } text-white`;
-      toast.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'} mr-2"></i>${message}`;
+      toast.innerHTML = message;
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 5000);
+    }
+    
+    // Load settings from database
+    async function loadSettings() {
+      try {
+        const response = await fetch(`${API_BASE}/settings/public`);
+        const data = await response.json();
+        
+        if (data.success) {
+          activationAmount = parseInt(data.settings.activation_fee) || 300;
+          referralCommission = parseInt(data.settings.referral_commission) || 120;
+          
+          // Update UI with dynamic values
+          document.getElementById('activationAmount').textContent = `Ksh ${activationAmount}`;
+          document.getElementById('activationSubtitle').textContent = `Pay Ksh ${activationAmount} to start earning!`;
+          document.getElementById('payButtonText').textContent = `Pay Ksh ${activationAmount} via M-PESA`;
+          document.getElementById('commissionMessage').textContent = `Earn Ksh ${referralCommission} per referral!`;
+          
+          console.log('✅ Settings loaded - Activation amount:', activationAmount);
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+        // Fallback to defaults
+        document.getElementById('activationAmount').textContent = 'Ksh 300';
+        document.getElementById('payButtonText').textContent = 'Pay Ksh 300 via M-PESA';
+        document.getElementById('commissionMessage').textContent = 'Earn Ksh 120 per referral!';
+      }
     }
     
     let pollingInterval = null;
@@ -126,30 +155,31 @@
       statusArea.innerHTML = `
         <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg">
           <i class="fas fa-info-circle mr-2"></i>
-          Sending payment request to ${phone}. Check your phone for M-PESA prompt.
+          Sending payment request for Ksh ${activationAmount}...
         </div>
       `;
       
       try {
+        // Use the dynamic activationAmount
         const response = await fetch(`${API_BASE}/payments/activate`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ phone, amount: 300 })  // Amount changed to 300
+          body: JSON.stringify({ phone, amount: activationAmount })
         });
         
         const data = await response.json();
         
         if (data.success) {
-          showToast('STK Push sent! Check your phone and enter PIN', 'success');
+          showToast(`STK Push sent for Ksh ${activationAmount}! Check your phone`, 'success');
           
           statusArea.innerHTML = `
             <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
               <i class="fas fa-check-circle mr-2"></i>
               <strong>STK Push Sent!</strong>
-              <div class="mt-1">Enter your M-PESA PIN on your phone to complete payment.</div>
+              <div class="mt-1">Enter your M-PESA PIN on your phone to complete payment of Ksh ${activationAmount}.</div>
               <div class="mt-2 text-sm">
                 <span class="loading mr-2"></span>
                 Waiting for payment confirmation...
@@ -157,7 +187,6 @@
             </div>
           `;
           
-          // Start polling for payment status
           pollPaymentStatus(data.checkoutRequestId);
         } else {
           throw new Error(data.error);
@@ -175,7 +204,7 @@
           </div>
         `;
         button.disabled = false;
-        button.innerHTML = '<i class="fas fa-money-bill-wave mr-2"></i>Pay Ksh 300 via M-PESA';
+        button.innerHTML = `<i class="fas fa-money-bill-wave mr-2"></i>Pay Ksh ${activationAmount} via M-PESA`;
       }
     }
     
@@ -184,9 +213,7 @@
       const maxAttempts = 30;
       const token = getToken();
       
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
+      if (pollingInterval) clearInterval(pollingInterval);
       
       pollingInterval = setInterval(async () => {
         attempts++;
@@ -199,19 +226,15 @@
           
           if (data.transaction && data.transaction.status === 'completed') {
             clearInterval(pollingInterval);
-            showToast('Payment successful! Account activated.', 'success');
-            setTimeout(() => {
-              window.location.href = 'dashboard.html';
-            }, 2000);
+            showToast(`Payment successful! Account activated.`, 'success');
+            setTimeout(() => window.location.href = 'dashboard.html', 2000);
           } else if (data.transaction && data.transaction.status === 'failed') {
             clearInterval(pollingInterval);
             showToast('Payment failed. Please try again.', 'error');
             document.getElementById('payButton').disabled = false;
-            document.getElementById('payButton').innerHTML = '<i class="fas fa-money-bill-wave mr-2"></i>Pay Ksh 300 via M-PESA';
           } else if (attempts >= maxAttempts) {
             clearInterval(pollingInterval);
             document.getElementById('payButton').disabled = false;
-            document.getElementById('payButton').innerHTML = '<i class="fas fa-money-bill-wave mr-2"></i>Pay Ksh 300 via M-PESA';
           }
         } catch (error) {
           console.error('Polling error:', error);
@@ -252,10 +275,14 @@
       window.location.href = 'index.html';
     }
     
-    document.getElementById('payButton').onclick = makePayment;
-    document.getElementById('logoutBtn').onclick = (e) => { e.preventDefault(); logout(); };
-    
-    loadUserInfo();
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadSettings();
+      await loadUserInfo();
+      
+      document.getElementById('payButton').onclick = makePayment;
+      document.getElementById('logoutBtn').onclick = (e) => { e.preventDefault(); logout(); };
+    });
   </script>
 </body>
 </html>

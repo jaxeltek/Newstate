@@ -7,7 +7,7 @@ let tokenExpiry = 0;
 
 // Get OAuth token from Safaricom
 const getAccessToken = async () => {
-  // Check if token is still valid (with 1 minute buffer)
+  // Check if token is still valid (with 5 minute buffer)
   if (Date.now() < tokenExpiry) {
     console.log('✅ Using cached access token');
     return accessToken;
@@ -30,7 +30,8 @@ const getAccessToken = async () => {
       { 
         headers: { 
           Authorization: `Basic ${auth}` 
-        } 
+        },
+        timeout: 10000
       }
     );
 
@@ -47,10 +48,14 @@ const getAccessToken = async () => {
     if (error.response) {
       console.error('   Status:', error.response.status);
       console.error('   Data:', error.response.data);
+      
+      if (error.response.status === 401) {
+        throw new Error('Invalid Consumer Key or Consumer Secret. Please check your credentials.');
+      }
     } else {
       console.error('   Message:', error.message);
     }
-    throw new Error('Failed to authenticate with M-PESA. Please check your credentials.');
+    throw new Error('Failed to authenticate with M-PESA');
   }
 };
 
@@ -114,8 +119,8 @@ const stkPush = async (phone, amount, accountReference, transactionDesc = 'Payme
     PartyB: shortcode,
     PhoneNumber: phone,
     CallBackURL: callbackUrl,
-    AccountReference: accountReference.substring(0, 12), // Max 12 characters
-    TransactionDesc: transactionDesc.substring(0, 13) // Max 13 characters
+    AccountReference: accountReference.substring(0, 12),
+    TransactionDesc: transactionDesc.substring(0, 13)
   };
 
   console.log('📋 STK Push Details:');
@@ -133,7 +138,8 @@ const stkPush = async (phone, amount, accountReference, transactionDesc = 'Payme
         headers: { 
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
-        } 
+        },
+        timeout: 30000
       }
     );
     
@@ -157,7 +163,7 @@ const stkPush = async (phone, amount, accountReference, transactionDesc = 'Payme
   }
 };
 
-// Query transaction status (useful for checking payment status)
+// Query transaction status
 const queryTransactionStatus = async (checkoutRequestId) => {
   console.log(`🔍 Querying transaction status for: ${checkoutRequestId}`);
   

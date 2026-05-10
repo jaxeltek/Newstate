@@ -1,19 +1,23 @@
 // backend/routes/payments.js
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
-const { stkPush, formatPhoneNumber } = require('../utils/mpesa');
+const { stkPush, formatPhoneNumber, queryTransactionStatus } = require('../utils/mpesa');
 const pool = require('../config/db');
 const router = express.Router();
+const settingsService = require('../services/settingsService');
 
 // Send STK Push for activation payment
+
+   
+   
 router.post('/activate', authenticate, async (req, res) => {
-  const { phone, amount = 300 } = req.body;  // Changed to 300
+  const { phone, amount = 300 } = req.body;
   const userId = req.user.id;
 
   console.log('\n========================================');
   console.log('📱 ACTIVATION PAYMENT REQUEST');
   console.log('User ID:', userId);
-  console.log('Phone:', phone);
+  console.log('Phone received:', phone);
   console.log('Amount:', amount);
   console.log('========================================\n');
 
@@ -81,6 +85,7 @@ router.post('/activate', authenticate, async (req, res) => {
 // M-PESA Callback URL (where Safaricom sends payment confirmation)
 router.post('/callback', async (req, res) => {
   console.log('\n📞 M-PESA Callback received');
+  console.log('Callback body:', JSON.stringify(req.body, null, 2));
   
   try {
     const callbackData = req.body;
@@ -151,7 +156,7 @@ router.post('/callback', async (req, res) => {
         const referralId = userResult.rows[0]?.referral_id;
 
         if (referrerId && referralId) {
-          const commission = 120; // Changed to Ksh 120
+          const commission = 120; // Ksh 120 commission
           
           // Update referrer's wallet
           await pool.query(
@@ -172,9 +177,17 @@ router.post('/callback', async (req, res) => {
              WHERE id = $2`,
             [commission, referralId]
           );
+          // Record earnings
+          await pool.query(
+         `INSERT INTO earnings (user_id, referral_id, amount, type) 
+          VALUES ($1, $2, $3, 'commission')`,
+          [referrerId, referralId, commission]
+  );
 
           console.log(`💰 Commission credited: Ksh ${commission} to referrer ${referrerId}`);
         }
+      } else {
+        console.log(`No pending transaction found for ${checkoutRequestId}`);
       }
     } else {
       // Payment failed
@@ -188,6 +201,7 @@ router.post('/callback', async (req, res) => {
       );
     }
 
+    // Always acknowledge receipt of callback
     res.json({ ResultCode: 0, ResultDesc: "Accepted" });
     
   } catch (err) {
@@ -207,7 +221,9 @@ router.get('/status/:checkoutRequestId', authenticate, async (req, res) => {
     if (result.rows.length > 0) {
       res.json({ success: true, transaction: result.rows[0] });
     } else {
-      res.json({ success: false, transaction: null });
+      // Query Safaricom for status
+      const status = await queryTransactionStatus(req.params.checkoutRequestId);
+      res.json({ success: true, transaction: null, mpesaStatus: status });
     }
   } catch (err) {
     console.error('Status check error:', err);
