@@ -29,20 +29,6 @@ services:
       - key: MPESA_CALLBACK_URL
         sync: false
 
-  # Frontend Static Site
-  - type: static
-    name: referral-frontend
-    runtime: static
-    buildCommand: echo "Static site ready"
-    staticPublishPath: ./frontend
-    envVars:
-      - key: VITE_API_URL
-        value: https://referral-backend.onrender.com/api
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-
   # PostgreSQL Database
   - type: postgresql
     name: referral-db
@@ -50,3 +36,5 @@ services:
     ipAllowList: []
     databaseName: referral_db
     postgresMajorVersion: 15
+
+# Frontend needs to be deployed separately on a different platform
